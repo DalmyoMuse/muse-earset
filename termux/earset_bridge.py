@@ -27,7 +27,15 @@ PORT = int(os.environ.get("EARSET_BRIDGE_PORT", "47823"))
 # only for a split test setup where the earset app lives on another device on a trusted
 # LAN: anyone who can reach the port can then put words in front of your Muse.
 BIND = os.environ.get("EARSET_BRIDGE_BIND", "127.0.0.1")
-PREFIX = "[Earset] "
+# Every message carries its own lead-in - the same pattern the owner's S24 agent uses:
+# it says who is speaking, through what, and how to answer (by voice, via earset-say).
+PREFIX = (
+    "[Earset] The owner is speaking through the Muse Earset app "
+    "(voice input - the words may be mis-recognized). "
+    "Answer by running the gadget command `earset-say \"<your reply>\"` so the reply is "
+    "spoken into the earset: keep it short and conversational, two or three sentences. "
+    "Also leave the same reply as chat text. Message: "
+)
 MAX_TEXT = 2000
 
 log = logging.getLogger("earset-bridge")
