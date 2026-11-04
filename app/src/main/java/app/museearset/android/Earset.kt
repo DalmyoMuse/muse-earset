@@ -32,6 +32,15 @@ object Earset {
     fun bridgeHost(ctx: Context): String = prefs(ctx).getString("bridge_host", "")?.ifEmpty { null } ?: "127.0.0.1"
     fun setBridgeHost(ctx: Context, h: String) = prefs(ctx).edit().putString("bridge_host", h.trim()).apply()
     fun bridgeUrl(ctx: Context) = "http://${bridgeHost(ctx)}:$BRIDGE_PORT/ask"
+
+    /**
+     * The lead-in the bridge puts in front of what you said - who is speaking, through
+     * what, and how Muse should answer. Editable (like in the Muse Agent app); the
+     * built-in default lives in earset_bridge.py, so an empty field here = that default.
+     */
+    const val DEFAULT_LEAD = ""
+    fun leadIn(ctx: Context): String = prefs(ctx).getString("lead_in", "") ?: ""
+    fun setLeadIn(ctx: Context, s: String) = prefs(ctx).edit().putString("lead_in", s.trim()).apply()
     fun micOk(ctx: Context) = ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     private val ui = Handler(Looper.getMainLooper())
@@ -53,23 +62,24 @@ object Earset {
      */
     fun send(ctx: Context, text: String): String {
         val url = bridgeUrl(ctx)
+        val lead = leadIn(ctx)
         var why = ""
         for (wait in listOf(0L, 2000L, 5000L, 10000L)) {
             if (wait > 0) Thread.sleep(wait)
-            why = post(url, text)
+            why = post(url, text, lead)
             if (why.isEmpty()) return ""
         }
         return why
     }
 
-    private fun post(url: String, text: String): String = runCatching {
+    private fun post(url: String, text: String, lead: String): String = runCatching {
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.connectTimeout = 5_000
         conn.readTimeout = 10_000
         conn.doOutput = true
         conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-        conn.outputStream.use { it.write(JSONObject().put("text", text).toString().toByteArray(Charsets.UTF_8)) }
+        conn.outputStream.use { it.write(JSONObject().put("text", text).put("lead", lead).toString().toByteArray(Charsets.UTF_8)) }
         val body = (if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream)
             ?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
         val r = runCatching { JSONObject(body) }.getOrNull()

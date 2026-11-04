@@ -27,6 +27,7 @@ class MainActivity : Activity() {
     private lateinit var logView: TextView
     private lateinit var keyField: EditText
     private lateinit var hostField: EditText
+    private lateinit var leadField: EditText
     private lateinit var cloudBox: LinearLayout
     private lateinit var localBox: LinearLayout
 
@@ -77,6 +78,20 @@ class MainActivity : Activity() {
             Earset.setBridgeHost(this, hostField.text.toString().ifBlank { "127.0.0.1" })
             ELog.log(this, "bridge host: ${Earset.bridgeHost(this)}")
             SayService.ensure(applicationContext)
+            refresh()
+        })
+
+        c.addView(header("Setup · Message lead-in"))
+        c.addView(note("The words put in front of everything you say, so Muse knows you are speaking through the earset and should answer out loud (the same idea as the Muse Agent app's prefix). Leave empty to use the bridge's built-in lead-in."))
+        leadField = EditText(this).apply {
+            hint = "(bridge's built-in lead-in)"
+            minLines = 3
+            setText(Earset.leadIn(this@MainActivity))
+        }
+        c.addView(leadField)
+        c.addView(button("Save lead-in") {
+            Earset.setLeadIn(this, leadField.text.toString())
+            ELog.log(this, "lead-in: ${if (Earset.leadIn(this).isEmpty()) "(bridge default)" else Earset.leadIn(this).take(40) + "…"}")
             refresh()
         })
 

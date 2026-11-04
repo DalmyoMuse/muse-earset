@@ -3,7 +3,7 @@
 Talk to Muse through a Bluetooth earset: press your earset's assistant gesture, speak,
 and hear the answer in your ear - in a voice you picked.
 
-**Status: early prototype (0.4).**
+**Status: early prototype (0.5).**
 
 ## How it fits together
 

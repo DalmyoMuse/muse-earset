@@ -54,8 +54,10 @@ def session_id() -> str:
     return sid
 
 
-def deliver(text: str) -> dict:
-    request = {"message": PREFIX + text, "session_id": session_id()}
+def deliver(text: str, lead: str = "") -> dict:
+    # The app may carry the owner's own lead-in (editable in its setup, like the agent's);
+    # an empty one falls back to the built-in default below.
+    request = {"message": (lead or PREFIX) + text, "session_id": session_id()}
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
             s.settimeout(15)
@@ -77,11 +79,12 @@ class Handler(BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(min(n, 64 * 1024)) or b"{}")
             text = str(body.get("text", "")).strip()[:MAX_TEXT]
+            lead = str(body.get("lead", "")).strip()[:1000]
         except (ValueError, AttributeError):
             return self._reply(400, {"ok": False, "why": "bad json"})
         if not text:
             return self._reply(400, {"ok": False, "why": "empty"})
-        result = deliver(text)
+        result = deliver(text, lead)
         log.info("ask %d chars -> %s", len(text), "ok" if result["ok"] else result["why"])
         self._reply(200, result)
 
