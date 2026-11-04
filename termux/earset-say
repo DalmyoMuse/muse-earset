@@ -3,16 +3,38 @@
 
     earset-say "Text to speak"     (or pipe the text on stdin)
 
-Hands the text to the app's spoken-answer listener (127.0.0.1:47822/say), which speaks it
+Hands the text to the app's spoken-answer listener (127.0.0.1:47824/say), which speaks it
 in the voice the owner chose in the app (Google Cloud or built-in). Prints one JSON line:
 {"ok": true} or {"ok": false, "why": "..."}. Loopback only.
 """
 
 import json
+import os
 import sys
 import urllib.request
 
-PORT = 47822
+PORT = 47824
+
+
+def _host() -> str:
+    # Where the earset app listens. Same phone by default; in a split setup the app
+    # device's LAN address (e.g. a tablet) - from the EARSET_APP_HOST env var, or from
+    # ~/.musegadget/earset_app_host (gadget child processes don't inherit shell env,
+    # so the file is the reliable place on a gadget host).
+    h = os.environ.get("EARSET_APP_HOST", "").strip()
+    if h:
+        return h
+    try:
+        with open(os.path.expanduser("~/.musegadget/earset_app_host")) as f:
+            h = f.read().strip()
+        if h:
+            return h
+    except OSError:
+        pass
+    return "127.0.0.1"
+
+
+HOST = _host()
 
 
 def main() -> int:
@@ -23,7 +45,7 @@ def main() -> int:
         print(json.dumps({"ok": False, "why": "no text"}))
         return 2
     req = urllib.request.Request(
-        f"http://127.0.0.1:{PORT}/say",
+        f"http://{HOST}:{PORT}/say",
         data=json.dumps({"text": text}).encode(),
         headers={"Content-Type": "application/json; charset=utf-8"},
         method="POST",

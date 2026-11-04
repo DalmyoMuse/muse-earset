@@ -13,17 +13,25 @@ import java.net.URL
 
 /**
  * The talk session's core: press to listen, press again to send. The recognized text goes to
- * the gadget-side bridge on this same phone (termux/earset_bridge.py, 127.0.0.1:47821), which
+ * the gadget-side bridge on this same phone (termux/earset_bridge.py, 127.0.0.1:47823), which
  * hands it to the paired Muse through the stock gadget SDK socket. Ported from the house
  * agent's Talk object, minus everything household (buttons, keys, car logic).
  */
 object Earset {
-    /** Where earset_bridge.py listens on this phone. */
-    const val BRIDGE_URL = "http://127.0.0.1:47821/ask"
+    const val BRIDGE_PORT = 47823
     /** How long after "ready" the start beep sounds at the earliest (ms). */
     const val BEEP_DELAY_MS = 400L
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("earset", Context.MODE_PRIVATE)
+
+    /**
+     * Setup (not one of the two everyday settings): where earset_bridge.py listens.
+     * "127.0.0.1" when the app and the gadget host are the same phone - the product's
+     * default. A LAN address when another device hosts the bridge (a split test setup).
+     */
+    fun bridgeHost(ctx: Context): String = prefs(ctx).getString("bridge_host", "")?.ifEmpty { null } ?: "127.0.0.1"
+    fun setBridgeHost(ctx: Context, h: String) = prefs(ctx).edit().putString("bridge_host", h.trim()).apply()
+    fun bridgeUrl(ctx: Context) = "http://${bridgeHost(ctx)}:$BRIDGE_PORT/ask"
     fun micOk(ctx: Context) = ctx.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     private val ui = Handler(Looper.getMainLooper())
@@ -44,17 +52,18 @@ object Earset {
      * Returns "" on success, or why it failed.
      */
     fun send(ctx: Context, text: String): String {
+        val url = bridgeUrl(ctx)
         var why = ""
         for (wait in listOf(0L, 2000L, 5000L, 10000L)) {
             if (wait > 0) Thread.sleep(wait)
-            why = post(text)
+            why = post(url, text)
             if (why.isEmpty()) return ""
         }
         return why
     }
 
-    private fun post(text: String): String = runCatching {
-        val conn = URL(BRIDGE_URL).openConnection() as HttpURLConnection
+    private fun post(url: String, text: String): String = runCatching {
+        val conn = URL(url).openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
         conn.connectTimeout = 5_000
         conn.readTimeout = 10_000

@@ -1,6 +1,6 @@
 """Muse Earset -> Muse: a tiny HTTP endpoint for the Muse Earset app on this phone.
 
-    POST http://127.0.0.1:47821/ask  {"text": "..."}  ->  {"ok": true} | {"ok": false, "why": "..."}
+    POST http://127.0.0.1:47823/ask  {"text": "..."}  ->  {"ok": true} | {"ok": false, "why": "..."}
 
 It forwards the text, the same way `musegadget send-user-msg --session-id` does, to one
 dedicated chat (its id is kept in ~/.musegadget/earset_session), so voice requests don't
@@ -22,7 +22,11 @@ from pathlib import Path
 STATE = Path(os.environ.get("MUSEGADGET_STATE_DIR") or Path.home() / ".musegadget")
 SOCK = Path(os.environ.get("MUSEGADGET_SOCKET") or STATE / "musegadget.sock")
 SESSION_FILE = STATE / "earset_session"
-PORT = int(os.environ.get("EARSET_BRIDGE_PORT", "47821"))
+PORT = int(os.environ.get("EARSET_BRIDGE_PORT", "47823"))
+# Loopback by default (app and host on the same phone). Set EARSET_BRIDGE_BIND=0.0.0.0
+# only for a split test setup where the earset app lives on another device on a trusted
+# LAN: anyone who can reach the port can then put words in front of your Muse.
+BIND = os.environ.get("EARSET_BRIDGE_BIND", "127.0.0.1")
 PREFIX = "[Earset] "
 MAX_TEXT = 2000
 
@@ -88,8 +92,8 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     session_id()
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    log.info("listening on 127.0.0.1:%d", PORT)
+    server = ThreadingHTTPServer((BIND, PORT), Handler)
+    log.info("listening on %s:%d", BIND, PORT)
     server.serve_forever()
 
 

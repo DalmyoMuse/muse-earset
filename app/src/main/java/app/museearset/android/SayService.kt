@@ -16,15 +16,21 @@ import java.net.ServerSocket
 
 /**
  * Hosts the spoken-answer listener: the gadget-side `earset-say` command POSTs Muse's reply
- * here (127.0.0.1:47822/say), and this app speaks it in the voice the settings chose, through
+ * here (127.0.0.1:47824/say), and this app speaks it in the voice the settings chose, through
  * whatever output is current (the earset, when connected). A foreground service, because
  * answers arrive at any time; the persistent notification is Android's price for that.
  * Loopback only - nothing here is reachable from the network.
  */
 class SayService : Service() {
     @Volatile private var running = false
+    @Volatile private var server: ServerSocket? = null
+    @Volatile private var boundTo: String? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** The bind the current setup implies (see serve()). */
+    private fun desiredBind(): String =
+        if (Earset.bridgeHost(this) == "127.0.0.1") "127.0.0.1" else "0.0.0.0"
 
     override fun onCreate() {
         super.onCreate()
@@ -41,22 +47,40 @@ class SayService : Service() {
         ELog.log(this, "say service started")
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Setup changed under a running service: closing the socket makes serve() rebind.
+        if (boundTo != null && boundTo != desiredBind()) {
+            ELog.log(this, "say listener rebinding (${boundTo} -> ${desiredBind()})")
+            runCatching { server?.close() }
+        }
+        return START_STICKY
+    }
 
     override fun onDestroy() {
         running = false
+        runCatching { server?.close() }
         super.onDestroy()
     }
 
     private fun serve() {
-        runCatching {
-            ServerSocket(PORT, 8, InetAddress.getByName("127.0.0.1")).use { server ->
-                while (running) {
-                    val sock = runCatching { server.accept() }.getOrNull() ?: break
-                    Thread { handle(sock) }.apply { isDaemon = true; start() }
+        // Loopback when the gadget host is this same device (the product default). In a
+        // split setup (bridge on another device) the host must reach this listener, so it
+        // opens to the LAN - trusted networks only, see the setup note in the settings.
+        while (running) {
+            val bind = desiredBind()
+            boundTo = bind
+            ELog.log(this, "say listener binding $bind:$PORT")
+            runCatching {
+                ServerSocket(PORT, 8, InetAddress.getByName(bind)).use { srv ->
+                    server = srv
+                    while (running) {
+                        val sock = runCatching { srv.accept() }.getOrNull() ?: break
+                        Thread { handle(sock) }.apply { isDaemon = true; start() }
+                    }
                 }
-            }
-        }.onFailure { ELog.log(this, "say server failed: ${it.message}") }
+            }.onFailure { if (running) ELog.log(this, "say server failed: ${it.message}") }
+            if (running) Thread.sleep(500)
+        }
     }
 
     private fun handle(sock: java.net.Socket) {
@@ -115,7 +139,7 @@ class SayService : Service() {
     }
 
     companion object {
-        const val PORT = 47822
+        const val PORT = 47824
         const val MAX_SAY_CHARS = 1200
         private const val CHANNEL = "earset"
 

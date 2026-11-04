@@ -26,6 +26,7 @@ class MainActivity : Activity() {
     private lateinit var voiceNow: TextView
     private lateinit var logView: TextView
     private lateinit var keyField: EditText
+    private lateinit var hostField: EditText
     private lateinit var cloudBox: LinearLayout
     private lateinit var localBox: LinearLayout
 
@@ -63,6 +64,21 @@ class MainActivity : Activity() {
         c.addView(note("Talk to Muse through your earset. This phone must already be a Muse Gadget (the bridge app + Termux setup); this app is its ears and voice."))
         status = value(""); c.addView(status)
         c.addView(button("Grant permissions (mic · nearby devices)") { grantPermissions() })
+
+        c.addView(header("Setup · Bridge host"))
+        c.addView(note("Where earset_bridge.py listens. 127.0.0.1 when this device is also the gadget host (the usual setup). In a split setup, the host device's LAN address - the say listener then opens to the LAN too, so use a trusted network only. Changing this restarts the say listener with the app."))
+        hostField = EditText(this).apply {
+            hint = "127.0.0.1"
+            setSingleLine(true)
+            setText(Earset.bridgeHost(this@MainActivity))
+        }
+        c.addView(hostField)
+        c.addView(button("Save bridge host") {
+            Earset.setBridgeHost(this, hostField.text.toString().ifBlank { "127.0.0.1" })
+            ELog.log(this, "bridge host: ${Earset.bridgeHost(this)}")
+            SayService.ensure(applicationContext)
+            refresh()
+        })
 
         c.addView(header("1 · Your earset"))
         c.addView(note("Pick the earset you talk into. While a talk session runs, its microphone is used (Bluetooth SCO); leave it unset to use the phone's mic."))
@@ -125,7 +141,8 @@ class MainActivity : Activity() {
         if (!Earset.micOk(this)) need += Manifest.permission.RECORD_AUDIO
         if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
             need += Manifest.permission.BLUETOOTH_CONNECT
-        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             need += Manifest.permission.POST_NOTIFICATIONS
         if (need.isEmpty()) { status.text = "All permissions already granted."; return }
         requestPermissions(need.toTypedArray(), 1)
