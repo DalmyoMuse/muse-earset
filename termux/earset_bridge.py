@@ -84,6 +84,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(400, {"ok": False, "why": "bad json"})
         if not text:
             return self._reply(400, {"ok": False, "why": "empty"})
+        # Remember who asked: earset-say sends the spoken reply back to this address, so
+        # the reply always lands on the device that asked (a tablet on the LAN, or this
+        # same phone at 127.0.0.1 in a one-phone setup).
+        try:
+            (STATE / "earset_app_host").write_text(self.client_address[0] + "\n")
+        except OSError:
+            pass
         result = deliver(text, lead)
         log.info("ask %d chars -> %s", len(text), "ok" if result["ok"] else result["why"])
         self._reply(200, result)

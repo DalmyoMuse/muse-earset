@@ -3,6 +3,7 @@ package app.museearset.android
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.content.Context
+import android.os.Build
 import android.os.SystemClock
 
 /**
@@ -49,6 +50,9 @@ object ScoRoute {
             ELog.log(app, "headset mic: a call owns the audio mode -> phone mic")
             return false
         }
+        // Before API 31 there is no per-device communication routing: the legacy path
+        // opens the classic Bluetooth SCO channel to the connected headset instead.
+        if (Build.VERSION.SDK_INT < 31) return beginLegacy(app, am, ready)
         val comm = runCatching { am.availableCommunicationDevices }.getOrDefault(emptyList())
         val target = comm.firstOrNull { isHeadset(it) && it.address == addr }
         if (target == null) {
@@ -88,6 +92,40 @@ object ScoRoute {
         return true
     }
 
+    /**
+     * Pre-API-31 route: MODE_IN_COMMUNICATION + startBluetoothSco, confirmed by polling
+     * isBluetoothScoOn. SCO goes to whichever headset is connected - the chosen earset
+     * must be the connected one (there is no per-device choice on this API level).
+     */
+    private fun beginLegacy(app: Context, am: AudioManager, ready: () -> Unit): Boolean {
+        savedMode = am.mode
+        runCatching { am.mode = AudioManager.MODE_IN_COMMUNICATION }
+        @Suppress("DEPRECATION") runCatching { am.startBluetoothSco() }
+        held = true
+        prefs(app).edit().putBoolean("es_held", true).putInt("es_saved_mode", savedMode).apply()
+        ELog.log(app, "headset mic (legacy SCO): mode $savedMode -> IN_COMMUNICATION, SCO start requested")
+        val my = ++runId
+        Thread {
+            val start = SystemClock.elapsedRealtime()
+            var confirmed = false
+            while (SystemClock.elapsedRealtime() - start < WAIT_MS) {
+                if (my != runId) return@Thread
+                if (runCatching { am.isBluetoothScoOn }.getOrDefault(false)) { confirmed = true; break }
+                Thread.sleep(100)
+            }
+            if (my != runId) return@Thread
+            val waited = SystemClock.elapsedRealtime() - start
+            if (confirmed) {
+                ELog.log(app, "headset mic (legacy SCO): on (${waited}ms) -> listening on the earset")
+            } else {
+                ELog.log(app, "headset mic (legacy SCO): not on in ${WAIT_MS}ms -> releasing, phone mic")
+                release(app)
+            }
+            ready()
+        }.start()
+        return true
+    }
+
     /** Undo the route: clear the device, and put the mode back only if it is still ours. */
     fun release(ctx: Context) {
         if (!held) return
@@ -96,7 +134,11 @@ object ScoRoute {
         val app = ctx.applicationContext
         prefs(app).edit().remove("es_held").remove("es_saved_mode").apply()
         val am = app.getSystemService(AudioManager::class.java)
-        runCatching { am.clearCommunicationDevice() }
+        if (Build.VERSION.SDK_INT >= 31) {
+            runCatching { am.clearCommunicationDevice() }
+        } else {
+            @Suppress("DEPRECATION") runCatching { am.stopBluetoothSco() }
+        }
         if (am.mode == AudioManager.MODE_IN_COMMUNICATION) {
             runCatching { am.mode = savedMode }
             ELog.log(app, "headset mic: released (mode back to $savedMode)")
@@ -117,7 +159,8 @@ object ScoRoute {
         val app = ctx.applicationContext
         val am = app.getSystemService(AudioManager::class.java)
         if (am.mode == AudioManager.MODE_IN_COMMUNICATION) {
-            runCatching { am.clearCommunicationDevice() }
+            if (Build.VERSION.SDK_INT >= 31) runCatching { am.clearCommunicationDevice() }
+            else @Suppress("DEPRECATION") runCatching { am.stopBluetoothSco() }
             runCatching { am.mode = was }
             ELog.log(app, "headset mic: cleaned up a leftover route (mode back to $was)")
         } else {

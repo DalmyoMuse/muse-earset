@@ -139,7 +139,8 @@ class MainActivity : Activity() {
     private fun refresh() {
         if (!::status.isInitialized) return
         val mic = Earset.micOk(this)
-        val bt = checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+        val bt = android.os.Build.VERSION.SDK_INT < 31 ||
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
         status.text = "Mic permission: ${if (mic) "granted" else "NOT granted"} · Nearby devices: ${if (bt) "granted" else "NOT granted"}"
         val addr = ScoRoute.deviceAddr(this)
         earsetNow.text = if (addr.isEmpty()) "Earset: not chosen (phone mic)"
@@ -154,7 +155,8 @@ class MainActivity : Activity() {
     private fun grantPermissions() {
         val need = mutableListOf<String>()
         if (!Earset.micOk(this)) need += Manifest.permission.RECORD_AUDIO
-        if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+        if (android.os.Build.VERSION.SDK_INT >= 31 &&
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
             need += Manifest.permission.BLUETOOTH_CONNECT
         if (android.os.Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
@@ -170,7 +172,8 @@ class MainActivity : Activity() {
 
     @SuppressLint("MissingPermission")
     private fun bonded(): List<Pair<String, String>> {
-        if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return emptyList()
+        if (android.os.Build.VERSION.SDK_INT >= 31 &&
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return emptyList()
         val ad = getSystemService(BluetoothManager::class.java)?.adapter ?: return emptyList()
         return runCatching {
             ad.bondedDevices.map { (it.address ?: "") to (it.name ?: it.address ?: "") }
