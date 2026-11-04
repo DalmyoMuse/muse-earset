@@ -1,0 +1,41 @@
+#!/data/data/com.termux/files/usr/bin/python3
+"""earset-say - Muse speaks through the Muse Earset app on this phone.
+
+    earset-say "Text to speak"     (or pipe the text on stdin)
+
+Hands the text to the app's spoken-answer listener (127.0.0.1:47822/say), which speaks it
+in the voice the owner chose in the app (Google Cloud or built-in). Prints one JSON line:
+{"ok": true} or {"ok": false, "why": "..."}. Loopback only.
+"""
+
+import json
+import sys
+import urllib.request
+
+PORT = 47822
+
+
+def main() -> int:
+    text = " ".join(sys.argv[1:]).strip()
+    if not text and not sys.stdin.isatty():
+        text = sys.stdin.read().strip()
+    if not text:
+        print(json.dumps({"ok": False, "why": "no text"}))
+        return 2
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{PORT}/say",
+        data=json.dumps({"text": text}).encode(),
+        headers={"Content-Type": "application/json; charset=utf-8"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            print(resp.read().decode())
+            return 0
+    except Exception as exc:  # app not running, service down, ...
+        print(json.dumps({"ok": False, "why": f"earset app: {exc}"}))
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
