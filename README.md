@@ -8,7 +8,7 @@ and hear the answer in your ear - in a voice you picked.
 ## How it fits together
 
 This app is the ears and voice on top of a phone that is already a Muse Gadget (the
-bridge app + Termux setup from `phone-as-muse-gadget`):
+bridge app + Termux setup from [phone-as-muse-gadget](https://github.com/DalmyoMuse/phone-as-muse-gadget) — set that up first):
 
 - You speak -> the app listens (through your chosen earset's microphone, via Bluetooth
   SCO) -> the text goes to `termux/earset_bridge.py` on the same phone -> the bridge hands
